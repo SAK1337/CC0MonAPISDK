@@ -1,0 +1,27 @@
+# Smoke-test log files (scripts write these to CWD)
+/cc0mon-api-*.log
+cc0mon-api-*.log
+
+# Downloaded image artifacts from example scripts
+cc0mon-*.svg
+cc0mon-*.png
+
+# Python build / install artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+build/
+dist/
+
+# Java build artifacts
+target/
+*.class
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

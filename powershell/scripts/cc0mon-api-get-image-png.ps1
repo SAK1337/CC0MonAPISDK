@@ -1,0 +1,42 @@
+<#
+.SYNOPSIS
+    Download the PNG artwork for a cc0mon token.
+
+.PARAMETER Id
+    Token id, 1..10000.
+
+.PARAMETER Out
+    Output path. Default: ./cc0mon-<id>.png in the current directory.
+
+.EXAMPLE
+    .\cc0mon-api-get-image-png.ps1 -Id 1
+    .\cc0mon-api-get-image-png.ps1 -Id 1 -Out .\my-mon.png
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory)] [ValidateRange(1, 10000)] [int] $Id,
+    [string] $Out
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+Import-Module (Join-Path $PSScriptRoot '..\CC0MonHelpers.psm1') -Force
+
+$action = 'get-image-png'
+if (-not $Out) { $Out = Join-Path (Get-Location).Path "cc0mon-$Id.png" }
+Write-Cc0Log -Action $action -Level INFO -Message "script start id=$Id out=$Out"
+
+try {
+    $bytes = Invoke-Cc0Request -Action $action -Path "/cc0mon/$Id/image.png" -Accept 'image/png' -ReturnRaw
+    if ($bytes -is [string]) { $bytes = [System.Text.Encoding]::UTF8.GetBytes($bytes) }
+    [System.IO.File]::WriteAllBytes($Out, $bytes)
+    (Resolve-Path $Out).Path
+    Write-Cc0Log -Action $action -Level INFO -Message "script exit code=0 bytes=$($bytes.Length) path=$Out"
+    exit 0
+} catch {
+    $code = ConvertTo-Cc0ExitCode -ErrorRecord $_
+    Write-Cc0Log -Action $action -Level ERROR -Message "exit=$code msg=$($_.Exception.Message)"
+    Write-Error $_.Exception.Message
+    exit $code
+}

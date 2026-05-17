@@ -20,7 +20,10 @@ from .errors import (
 )
 from .logging_setup import configure_logger
 from .models import (
+    ENERGIES,
+    RARITIES,
     Collector,
+    CollectorItem,
     Contract,
     Metadata,
     OwnerInfo,
@@ -28,6 +31,8 @@ from .models import (
     SpeciesImage,
     Token,
     Traits,
+    validate_energy,
+    validate_rarity,
 )
 
 __all__ = [
@@ -41,7 +46,10 @@ __all__ = [
     "RateLimitError",
     "ServerApiError",
     "ValidationError",
+    "ENERGIES",
+    "RARITIES",
     "Collector",
+    "CollectorItem",
     "Contract",
     "Metadata",
     "OwnerInfo",
@@ -49,4 +57,6 @@ __all__ = [
     "SpeciesImage",
     "Token",
     "Traits",
+    "validate_energy",
+    "validate_rarity",
 ]

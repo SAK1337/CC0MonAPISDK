@@ -72,6 +72,27 @@ Get-Content .\cc0mon-api-get-token.log -Tail 10
 | `5` | Argument/input validation |
 | `1` | Unexpected error |
 
+## Search & filtering
+
+Three scripts accept filter flags; the SDK also exposes `Client.find_species()` and `Client.find_collector_items()`. Filters are AND-combined, validated against the canonical 16 energies × 4 rarities, and applied client-side.
+
+```powershell
+python examples\cc0mon-api-get-registry.py --energy Fire --rarity Common
+python examples\cc0mon-api-get-registry-images.py --name-contains drill --has-image
+python examples\cc0mon-api-get-collector.py --address 0xB07952A55bF9c45C268F37C3631823Df50ac721a --owned-only --energy Fire
+```
+
+```python
+from cc0mon_sdk import Client, ENERGIES
+
+with Client() as c:
+    fire_common = c.find_species(energy="Fire", rarity="Common")
+    print([s.name for s in fire_common])
+    print("valid energies:", sorted(ENERGIES))
+```
+
+Invalid energy/rarity raises `ValidationError` (script exit `5`) with a message listing valid values.
+
 ## Customizing the client
 
 ```python

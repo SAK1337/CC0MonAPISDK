@@ -89,6 +89,30 @@ Get-Content .\cc0mon-api-get-token.log -Tail 10
 | `5` | Argument/input validation |
 | `1` | Unexpected error |
 
+## Search & filtering
+
+Three scripts accept filter flags; the SDK also exposes `findSpecies()` and `findCollectorItems()`. Filters are AND-combined, validated against the 16 energies × 4 rarities in `Models.ENERGIES` / `Models.RARITIES`, and applied client-side.
+
+```powershell
+jbang examples\cc0mon-api-get-registry.java --energy Fire --rarity Common
+jbang examples\cc0mon-api-get-registry-images.java --name-contains drill --has-image
+jbang examples\cc0mon-api-get-collector.java --address 0xB07952A55bF9c45C268F37C3631823Df50ac721a --owned-only --energy Fire
+```
+
+```java
+import com.cc0mon.sdk.Client;
+import com.cc0mon.sdk.Models;
+import com.cc0mon.sdk.Models.Species;
+
+try (Client c = new Client()) {
+    List<Species> fireCommon = c.findSpecies("Fire", "Common", null);
+    fireCommon.forEach(s -> System.out.println(s.name()));
+    System.out.println("valid energies: " + Models.ENERGIES);
+}
+```
+
+Invalid energy/rarity throws `Errors.ValidationException` (script exit `5`) with a message listing valid values.
+
 ## Customizing the client
 
 ```java

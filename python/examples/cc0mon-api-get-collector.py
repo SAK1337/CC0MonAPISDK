@@ -1,8 +1,14 @@
-"""cc0mon-api-get-collector — fetch a wallet's collection checklist.
+"""cc0mon-api-get-collector — fetch and optionally filter a wallet's collection.
 
 Usage::
 
-    python cc0mon-api-get-collector.py --address 0xabc...def
+    python cc0mon-api-get-collector.py --address 0x...
+    python cc0mon-api-get-collector.py --address 0x... --owned-only
+    python cc0mon-api-get-collector.py --address 0x... --owned-only --energy Fire
+
+Without any filter flag, the full collector summary (progress, byEnergy,
+checklist) is printed. When any filter is supplied, only the filtered
+checklist items array is printed.
 
 Only 0x-prefixed hex addresses are accepted (no ENS).
 """
@@ -14,6 +20,8 @@ import json
 import sys
 
 from cc0mon_sdk import (
+    ENERGIES,
+    RARITIES,
     Client,
     ClientApiError,
     NetworkError,
@@ -26,16 +34,39 @@ ACTION = "get-collector"
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Fetch a wallet's cc0mon collection checklist.")
+    parser = argparse.ArgumentParser(
+        description="Fetch a wallet's cc0mon collection checklist, optionally filtered.",
+        epilog=(
+            f"Valid --energy values: {', '.join(sorted(ENERGIES))}\n"
+            f"Valid --rarity values: {', '.join(sorted(RARITIES))}"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument("--address", required=True, help="Ethereum 0x-address (42 chars)")
+    parser.add_argument("--owned-only", dest="owned_only", action="store_true", help="Show only collected items")
+    parser.add_argument("--energy", default=None, help="Filter checklist items by energy")
+    parser.add_argument("--rarity", default=None, help="Filter checklist items by rarity")
     args = parser.parse_args(argv)
 
     logger = configure_logger(ACTION)
-    logger.info("script start address=%s", args.address)
+    logger.info(
+        "script start address=%s owned_only=%s energy=%s rarity=%s",
+        args.address, args.owned_only, args.energy, args.rarity,
+    )
+
+    has_filter = args.owned_only or args.energy or args.rarity
 
     try:
         with Client() as client:
-            collector = client.get_collector(args.address)
+            if has_filter:
+                items = client.find_collector_items(
+                    args.address,
+                    owned_only=args.owned_only,
+                    energy=args.energy,
+                    rarity=args.rarity,
+                )
+            else:
+                collector = client.get_collector(args.address)
     except ValidationError as e:
         logger.error("validation: %s", e)
         print(f"validation error: {e}", file=sys.stderr)
@@ -53,12 +84,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"server error HTTP {e.status_code}: {e.body[:200]}", file=sys.stderr)
         return 4
 
-    print(json.dumps(dataclasses.asdict(collector), indent=2, default=str))
-    logger.info(
-        "script exit code=0 progress_keys=%d items=%d",
-        len(collector.progress),
-        len(collector.items),
-    )
+    if has_filter:
+        print(json.dumps([dataclasses.asdict(i) for i in items], indent=2, default=str))
+        logger.info("script exit code=0 matched=%d", len(items))
+    else:
+        out = dataclasses.asdict(collector)
+        print(json.dumps(out, indent=2, default=str))
+        logger.info(
+            "script exit code=0 collected=%d missing=%d total_tokens_held=%d",
+            collector.collected, collector.missing, collector.total_tokens_held,
+        )
     return 0
 
 

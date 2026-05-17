@@ -1,6 +1,7 @@
 package com.cc0mon.sdk;
 
 import com.cc0mon.sdk.Models.Collector;
+import com.cc0mon.sdk.Models.CollectorItem;
 import com.cc0mon.sdk.Models.Contract;
 import com.cc0mon.sdk.Models.Metadata;
 import com.cc0mon.sdk.Models.OwnerInfo;
@@ -31,6 +32,8 @@ class ClientIT {
 
     private static final int SAMPLE_TOKEN_ID = 1;
     private static final String SAMPLE_ADDRESS = "0x0000000000000000000000000000000000000000";
+    // Known holder of token #1; used for non-trivial collector assertions.
+    private static final String KNOWN_HOLDER = "0xB07952A55bF9c45C268F37C3631823Df50ac721a";
     private static Client client;
 
     @BeforeAll
@@ -102,12 +105,35 @@ class ClientIT {
     @Test
     void getRegistryImages() {
         List<SpeciesImage> images = client.getRegistryImages();
-        assertTrue(images.size() >= 1);
+        assertEquals(260, images.size());
+        long mapped = images.stream().filter(i -> i.tokenId() != null).count();
+        assertEquals(259, mapped);
     }
 
     @Test
     void getCollector() {
-        Collector c = client.getCollector(SAMPLE_ADDRESS);
-        assertNotNull(c.raw());
+        Collector c = client.getCollector(KNOWN_HOLDER);
+        assertNotNull(c.progress());
+        assertTrue(c.progress().endsWith("%"));
+        assertEquals(260, c.totalCC0mon());
+        assertEquals(260, c.checklist().size());
+        assertNotNull(c.byEnergy());
+        assertTrue(c.collected() >= 1);
+    }
+
+    @Test
+    void findSpeciesFilterSubset() {
+        List<Species> fireAll = client.findSpecies("Fire", null, null);
+        List<Species> fireCommon = client.findSpecies("Fire", "Common", null);
+        assertTrue(fireCommon.size() <= fireAll.size());
+        assertTrue(fireCommon.stream().allMatch(s -> "Fire".equals(s.energy()) && "Common".equals(s.rarity())));
+    }
+
+    @Test
+    void findCollectorItemsOwnedOnly() {
+        Collector c = client.getCollector(KNOWN_HOLDER);
+        List<CollectorItem> owned = client.findCollectorItems(KNOWN_HOLDER, true, null, null);
+        assertEquals(c.collected(), owned.size());
+        assertTrue(owned.stream().allMatch(CollectorItem::collected));
     }
 }

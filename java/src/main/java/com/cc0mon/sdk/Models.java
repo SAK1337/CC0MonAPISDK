@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Typed response records for the cc0mon API.
@@ -17,6 +19,18 @@ import java.util.Map;
 public final class Models {
 
     private Models() {}
+
+    /** Canonical, frozen set of energy types returned by {@code /registry}. */
+    public static final Set<String> ENERGIES = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(
+        "Bug", "Celestial", "Dragon", "Earth", "Electric", "Fire",
+        "Fossil", "Ghost", "Grass", "Ice", "Metal", "Mythic",
+        "Ocean", "Rock", "Toxic", "Underworld"
+    )));
+
+    /** Canonical, frozen set of rarity tiers. */
+    public static final Set<String> RARITIES = Collections.unmodifiableSet(new LinkedHashSet<>(List.of(
+        "Common", "Uncommon", "Rare", "Legendary"
+    )));
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -165,20 +179,69 @@ public final class Models {
         }
     }
 
-    public record Collector(
-        String address,
-        Map<String, Object> progress,
-        List<Map<String, Object>> items,
+    public record CollectorItem(
+        int number,
+        String name,
+        String energy,
+        String rarity,
+        boolean collected,
+        List<Integer> tokenIds,
         Map<String, Object> raw
     ) {
+        public static CollectorItem fromJson(JsonNode n) {
+            List<Integer> tokens = new ArrayList<>();
+            JsonNode arr = n.get("tokenIds");
+            if (arr == null || !arr.isArray()) arr = n.get("token_ids");
+            if (arr != null && arr.isArray()) {
+                for (JsonNode t : arr) if (t.canConvertToInt()) tokens.add(t.asInt());
+            }
+            boolean collected = n.has("collected") && n.get("collected").asBoolean(false);
+            return new CollectorItem(
+                intOrZero(n, "number", "id"),
+                text(n, "name"),
+                text(n, "energy"),
+                text(n, "rarity"),
+                collected,
+                tokens,
+                toMap(n)
+            );
+        }
+    }
+
+    public record Collector(
+        String address,
+        int totalCC0mon,
+        int collected,
+        int missing,
+        String progress,
+        int totalTokensHeld,
+        Map<String, Object> byEnergy,
+        List<CollectorItem> checklist,
+        Map<String, Object> raw
+    ) {
+        /** Backwards-compatible alias for {@link #checklist()}. Deprecated. */
+        @Deprecated
+        public List<CollectorItem> items() { return checklist; }
+
         public static Collector fromJson(JsonNode n) {
-            Map<String, Object> progress = toMap(n.get("progress"));
-            List<Map<String, Object>> items = new ArrayList<>();
-            JsonNode arr = n.get("items");
-            if (arr == null || !arr.isArray()) arr = n.get("checklist");
+            List<CollectorItem> checklist = new ArrayList<>();
+            JsonNode arr = n.get("checklist");
+            if (arr == null || !arr.isArray()) arr = n.get("items");
             if (arr == null || !arr.isArray()) arr = n.get("registry");
-            if (arr != null && arr.isArray()) for (JsonNode a : arr) items.add(toMap(a));
-            return new Collector(text(n, "address"), progress, items, toMap(n));
+            if (arr != null && arr.isArray()) {
+                for (JsonNode a : arr) checklist.add(CollectorItem.fromJson(a));
+            }
+            return new Collector(
+                text(n, "address"),
+                intOrZero(n, "totalCC0mon", "total_cc0mon"),
+                intOrZero(n, "collected"),
+                intOrZero(n, "missing"),
+                text(n, "progress"),
+                intOrZero(n, "totalTokensHeld", "total_tokens_held"),
+                toMap(n.get("byEnergy") != null ? n.get("byEnergy") : n.get("by_energy")),
+                checklist,
+                toMap(n)
+            );
         }
     }
 }

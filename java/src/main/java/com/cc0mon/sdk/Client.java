@@ -7,6 +7,7 @@ import com.cc0mon.sdk.Errors.RateLimitException;
 import com.cc0mon.sdk.Errors.ServerApiException;
 import com.cc0mon.sdk.Errors.ValidationException;
 import com.cc0mon.sdk.Models.Collector;
+import com.cc0mon.sdk.Models.CollectorItem;
 import com.cc0mon.sdk.Models.Contract;
 import com.cc0mon.sdk.Models.Metadata;
 import com.cc0mon.sdk.Models.OwnerInfo;
@@ -24,7 +25,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
@@ -230,7 +233,16 @@ public final class Client implements AutoCloseable {
     public List<Species> getRegistry() {
         JsonNode node = getJson("/registry");
         List<Species> out = new ArrayList<>();
-        JsonNode arr = node.isArray() ? node : node.has("species") ? node.get("species") : node.get("items");
+        JsonNode arr;
+        if (node.isArray()) {
+            arr = node;
+        } else if (node.has("cc0mon")) {
+            arr = node.get("cc0mon");
+        } else if (node.has("species")) {
+            arr = node.get("species");
+        } else {
+            arr = node.get("items");
+        }
         if (arr != null && arr.isArray()) for (JsonNode n : arr) out.add(Species.fromJson(n));
         return out;
     }
@@ -238,12 +250,67 @@ public final class Client implements AutoCloseable {
     public List<SpeciesImage> getRegistryImages() {
         JsonNode node = getJson("/registry/images");
         List<SpeciesImage> out = new ArrayList<>();
-        JsonNode arr = node.isArray() ? node : node.has("species") ? node.get("species") : node.get("items");
+        if (node.isArray()) {
+            for (JsonNode n : node) out.add(SpeciesImage.fromJson(n));
+            return out;
+        }
+        JsonNode images = node.get("images");
+        if (images != null && images.isObject()) {
+            Iterator<JsonNode> it = images.elements();
+            while (it.hasNext()) out.add(SpeciesImage.fromJson(it.next()));
+            return out;
+        }
+        if (images != null && images.isArray()) {
+            for (JsonNode n : images) out.add(SpeciesImage.fromJson(n));
+            return out;
+        }
+        JsonNode arr = node.has("species") ? node.get("species") : node.get("items");
         if (arr != null && arr.isArray()) for (JsonNode n : arr) out.add(SpeciesImage.fromJson(n));
         return out;
     }
 
     public Collector getCollector(String address) {
         return Collector.fromJson(getJson("/collector/" + normalizeAddress(address)));
+    }
+
+    // ---------- Convenience search methods (client-side filters) ----------
+
+    /**
+     * Return species filtered by energy/rarity/name substring. All filters are
+     * AND-combined; energy and rarity are validated against canonical sets.
+     * Pass {@code null} for any filter you want to skip.
+     */
+    public List<Species> findSpecies(String energy, String rarity, String nameContains) {
+        String e = energy == null ? null : Validators.energy(energy);
+        String r = rarity == null ? null : Validators.rarity(rarity);
+        String needle = nameContains == null ? null : nameContains.toLowerCase(Locale.ROOT);
+        List<Species> out = new ArrayList<>();
+        for (Species s : getRegistry()) {
+            if (e != null && !e.equals(s.energy())) continue;
+            if (r != null && !r.equals(s.rarity())) continue;
+            if (needle != null) {
+                String name = s.name() == null ? "" : s.name().toLowerCase(Locale.ROOT);
+                if (!name.contains(needle)) continue;
+            }
+            out.add(s);
+        }
+        return out;
+    }
+
+    /**
+     * Return a wallet's checklist items, filtered by ownership/energy/rarity.
+     */
+    public List<CollectorItem> findCollectorItems(String address, boolean ownedOnly, String energy, String rarity) {
+        String e = energy == null ? null : Validators.energy(energy);
+        String r = rarity == null ? null : Validators.rarity(rarity);
+        Collector collector = getCollector(address);
+        List<CollectorItem> out = new ArrayList<>();
+        for (CollectorItem i : collector.checklist()) {
+            if (ownedOnly && !i.collected()) continue;
+            if (e != null && !e.equals(i.energy())) continue;
+            if (r != null && !r.equals(i.rarity())) continue;
+            out.add(i);
+        }
+        return out;
     }
 }

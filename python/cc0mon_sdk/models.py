@@ -8,6 +8,43 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from .errors import ValidationError
+
+#: Canonical set of energy types returned by ``/registry``. Frozen and case-sensitive.
+ENERGIES: frozenset[str] = frozenset({
+    "Bug", "Celestial", "Dragon", "Earth", "Electric", "Fire",
+    "Fossil", "Ghost", "Grass", "Ice", "Metal", "Mythic",
+    "Ocean", "Rock", "Toxic", "Underworld",
+})
+
+#: Canonical set of rarity tiers returned by ``/registry``.
+RARITIES: frozenset[str] = frozenset({"Common", "Uncommon", "Rare", "Legendary"})
+
+_ENERGIES_LOWER: dict[str, str] = {e.lower(): e for e in ENERGIES}
+_RARITIES_LOWER: dict[str, str] = {r.lower(): r for r in RARITIES}
+
+
+def validate_energy(value: str) -> str:
+    """Return the canonical-case energy or raise ``ValidationError`` listing valid options."""
+    if not isinstance(value, str):
+        raise ValidationError(f"energy must be a string, got {type(value).__name__}")
+    canonical = _ENERGIES_LOWER.get(value.lower())
+    if canonical is None:
+        valid = ", ".join(sorted(ENERGIES))
+        raise ValidationError(f"unknown energy: {value!r}. valid: {valid}")
+    return canonical
+
+
+def validate_rarity(value: str) -> str:
+    """Return the canonical-case rarity or raise ``ValidationError`` listing valid options."""
+    if not isinstance(value, str):
+        raise ValidationError(f"rarity must be a string, got {type(value).__name__}")
+    canonical = _RARITIES_LOWER.get(value.lower())
+    if canonical is None:
+        valid = ", ".join(["Common", "Uncommon", "Rare", "Legendary"])
+        raise ValidationError(f"unknown rarity: {value!r}. valid: {valid}")
+    return canonical
+
 
 def _get(d: dict, *keys: str, default: Any = None) -> Any:
     """Return ``d[k]`` for the first key present, else ``default``.
@@ -148,17 +185,56 @@ class SpeciesImage:
 
 
 @dataclass(frozen=True)
-class Collector:
-    address: str
-    progress: dict[str, Any]
-    items: list[dict[str, Any]]
+class CollectorItem:
+    number: int
+    name: str
+    energy: str | None
+    rarity: str | None
+    collected: bool
+    token_ids: list[int]
     raw: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> "CollectorItem":
+        return cls(
+            number=int(_get(d, "number", "id", default=0)),
+            name=str(_get(d, "name", default="")),
+            energy=_get(d, "energy"),
+            rarity=_get(d, "rarity"),
+            collected=bool(_get(d, "collected", default=False)),
+            token_ids=list(_get(d, "tokenIds", "token_ids", default=[]) or []),
+            raw=d,
+        )
+
+
+@dataclass(frozen=True)
+class Collector:
+    address: str
+    total_cc0mon: int
+    collected: int
+    missing: int
+    progress: str
+    total_tokens_held: int
+    by_energy: dict[str, Any]
+    checklist: list[CollectorItem]
+    raw: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def items(self) -> list[CollectorItem]:
+        """Backwards-compat alias for ``checklist``. Deprecated."""
+        return self.checklist
+
+    @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "Collector":
+        raw_checklist = _get(d, "checklist", "items", "registry", default=[]) or []
         return cls(
             address=str(_get(d, "address", default="")),
-            progress=dict(_get(d, "progress", default={}) or {}),
-            items=list(_get(d, "items", "checklist", "registry", default=[]) or []),
+            total_cc0mon=int(_get(d, "totalCC0mon", "total_cc0mon", default=0)),
+            collected=int(_get(d, "collected", default=0)),
+            missing=int(_get(d, "missing", default=0)),
+            progress=str(_get(d, "progress", default="")),
+            total_tokens_held=int(_get(d, "totalTokensHeld", "total_tokens_held", default=0)),
+            by_energy=dict(_get(d, "byEnergy", "by_energy", default={}) or {}),
+            checklist=[CollectorItem.from_dict(i) for i in raw_checklist if isinstance(i, dict)],
             raw=d,
         )

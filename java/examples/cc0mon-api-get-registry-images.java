@@ -10,23 +10,40 @@ import com.cc0mon.sdk.Models.SpeciesImage;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.logging.Logger;
 
 class GetRegistryImages {
     public static void main(String[] args) {
         Logger log = LoggingSetup.configure("get-registry-images");
         Integer limit = null;
-        for (int i = 0; i + 1 < args.length; i++) {
-            if ("--limit".equals(args[i])) try { limit = Integer.parseInt(args[i + 1]); } catch (NumberFormatException e) {}
+        String nameContains = null;
+        boolean hasImage = false;
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "--limit": if (i + 1 < args.length) try { limit = Integer.parseInt(args[++i]); } catch (NumberFormatException e) {} break;
+                case "--name-contains": if (i + 1 < args.length) nameContains = args[++i]; break;
+                case "--has-image": hasImage = true; break;
+            }
         }
-        log.info("script start limit=" + limit);
+        log.info("script start limit=" + limit + " name_contains=" + nameContains + " has_image=" + hasImage);
 
         try (Client client = new Client()) {
             List<SpeciesImage> images = client.getRegistryImages();
-            List<SpeciesImage> shown = limit == null ? images : images.subList(0, Math.min(limit, images.size()));
+            List<SpeciesImage> filtered = new ArrayList<>(images);
+            if (hasImage) filtered.removeIf(i -> i.tokenId() == null);
+            if (nameContains != null) {
+                String needle = nameContains.toLowerCase(Locale.ROOT);
+                filtered.removeIf(i -> {
+                    String name = i.name() == null ? "" : i.name().toLowerCase(Locale.ROOT);
+                    return !name.contains(needle);
+                });
+            }
+            List<SpeciesImage> shown = limit == null ? filtered : filtered.subList(0, Math.min(limit, filtered.size()));
             System.out.println(new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValueAsString(shown));
-            log.info("script exit code=0 total=" + images.size() + " shown=" + shown.size());
+            log.info("script exit code=0 total=" + images.size() + " matched=" + filtered.size() + " shown=" + shown.size());
         } catch (Errors.NetworkException e)    { log.severe("network: " + e.getMessage());    System.err.println("network error: " + e.getMessage()); System.exit(2);
         } catch (Errors.ClientApiException e)  { log.severe("http " + e.getStatusCode());     System.err.println("client error HTTP " + e.getStatusCode() + ": " + e.getBody()); System.exit(3);
         } catch (Errors.ServerApiException e)  { log.severe("http " + e.getStatusCode());     System.err.println("server error HTTP " + e.getStatusCode() + ": " + e.getBody()); System.exit(4);

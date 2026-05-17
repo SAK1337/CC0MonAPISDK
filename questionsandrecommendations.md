@@ -193,6 +193,27 @@ This document lists open questions deferred from `spec.md`. Each has a **stated 
 
 ---
 
+## Section I-bis — Search & filtering (v0.2 update)
+
+### Q22. Filter values — fixed enum or open string?
+
+- **Decided in v0.2:** **Fixed enum**. The 16 energies and 4 rarities are hard-coded in each language; unknown values raise `ValidationError`/`ValidationException` with a friendly list. Match is case-insensitive; storage is canonical case.
+- **Future trigger:** if cc0mon adds a 17th energy, the SDK must add it to the constant set in a patch release. The `raw` field still carries any new attribute even before the SDK is updated.
+
+### Q23. Token-level search across all 9,999 tokens?
+
+- **Out of scope in v0.2.** Iterating `/cc0mon/{id}/traits` for 10,000 ids at 60 req/min would take ~167 minutes. Document as a recipe if a user requests.
+
+### Q24. Multi-value OR filters (e.g. `--energy Fire,Water`)?
+
+- **Deferred.** Single-value AND-only is enough for the demonstrated use cases. Will revisit if a user reports a real need.
+
+### Q25. Sorting filter output?
+
+- **Out of scope.** Shell tools (`jq`, `Sort-Object`) handle this cleanly; baking it into the SDK would add CLI surface area for little gain.
+
+---
+
 ## Section J — Future work flags
 
 The following items are explicitly **not implemented in v0.1** but flagged for v0.2+:

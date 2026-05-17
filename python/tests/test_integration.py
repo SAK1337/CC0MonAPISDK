@@ -89,9 +89,33 @@ def test_get_registry(client: Client) -> None:
 
 def test_get_registry_images(client: Client) -> None:
     images = client.get_registry_images()
-    assert len(images) >= 1
+    # API has 260 species; one (Vilewing) is unmapped — but it still appears.
+    assert len(images) == 260
+    mapped = [i for i in images if i.token_id is not None]
+    assert len(mapped) == 259
 
 
 def test_get_collector(client: Client) -> None:
-    collector = client.get_collector(SAMPLE_ADDRESS)
-    assert collector.raw is not None
+    # Use a known holder so we get non-zero progress.
+    collector = client.get_collector("0xB07952A55bF9c45C268F37C3631823Df50ac721a")
+    assert isinstance(collector.progress, str)
+    assert collector.progress.endswith("%")
+    assert collector.total_cc0mon == 260
+    assert len(collector.checklist) == 260
+    assert isinstance(collector.by_energy, dict)
+    assert collector.collected >= 1
+
+
+def test_find_species_filter_subset(client: Client) -> None:
+    fire_all = client.find_species(energy="Fire")
+    fire_common = client.find_species(energy="Fire", rarity="Common")
+    assert len(fire_common) <= len(fire_all)
+    assert all(s.energy == "Fire" and s.rarity == "Common" for s in fire_common)
+
+
+def test_find_collector_items_owned_only_consistent(client: Client) -> None:
+    addr = "0xB07952A55bF9c45C268F37C3631823Df50ac721a"
+    collector = client.get_collector(addr)
+    owned = client.find_collector_items(addr, owned_only=True)
+    assert len(owned) == collector.collected
+    assert all(i.collected for i in owned)

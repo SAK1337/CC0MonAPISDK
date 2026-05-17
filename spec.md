@@ -366,7 +366,62 @@ All 30 calls in a full run consume ≤30 of the 60-per-minute rate budget. Tests
 
 ---
 
-## 16. Glossary
+## 16. Search & filtering
+
+The SDK exposes attribute-based filtering over the registry and collector endpoints. The API itself has no search endpoint; filters are applied **client-side** after a single GET. This keeps the rate-limit footprint at one request per filter call.
+
+### 16.1 Closed value sets
+
+The cc0mon attribute space is fixed:
+
+| Set | Values | Source |
+|-----|--------|--------|
+| Energy (16) | Bug, Celestial, Dragon, Earth, Electric, Fire, Fossil, Ghost, Grass, Ice, Metal, Mythic, Ocean, Rock, Toxic, Underworld | `/registry` |
+| Rarity (4) | Common, Uncommon, Rare, Legendary | `/registry` |
+
+These are exported as constants in each language: `cc0mon_sdk.ENERGIES`/`RARITIES` (Python), `com.cc0mon.sdk.Models.ENERGIES`/`RARITIES` (Java), `Get-Cc0Energies`/`Get-Cc0Rarities` (PowerShell).
+
+### 16.2 Validation
+
+Energy and rarity inputs are matched case-insensitively against the canonical sets and normalized to canonical casing (`"fire"` → `"Fire"`). Unknown values raise `ValidationError` / `ValidationException` whose message lists the valid options. Scripts map this to exit code `5`.
+
+### 16.3 Script flag matrix
+
+| Script | New flags | Notes |
+|--------|-----------|-------|
+| `cc0mon-api-get-registry.<ext>` | `--energy <type>`, `--rarity <tier>`, `--name-contains <substring>` | All AND-combined; `--limit` applied after filtering. |
+| `cc0mon-api-get-registry-images.<ext>` | `--name-contains <substring>`, `--has-image` | `--has-image` excludes entries with `tokenId=null` (the unmapped Vilewing species). |
+| `cc0mon-api-get-collector.<ext>` | `--owned-only`, `--energy <type>`, `--rarity <tier>` | Without any filter, the full collector summary (progress, byEnergy, checklist) is printed. With any filter, only the filtered checklist items array is printed. |
+
+Empty result is **not** an error: scripts print `[]` and exit `0`.
+
+### 16.4 SDK convenience methods
+
+In addition to script flags, the Python and Java SDK libraries expose:
+
+**Python** (`cc0mon_sdk.Client`):
+
+```python
+client.find_species(energy=None, rarity=None, name_contains=None) -> list[Species]
+client.find_collector_items(address, owned_only=False, energy=None, rarity=None) -> list[CollectorItem]
+```
+
+**Java** (`com.cc0mon.sdk.Client`):
+
+```java
+List<Species> findSpecies(String energy, String rarity, String nameContains)
+List<CollectorItem> findCollectorItems(String address, boolean ownedOnly, String energy, String rarity)
+```
+
+Both make a single underlying HTTP call (to `/registry` or `/collector/{address}`) and filter the result in memory.
+
+### 16.5 Token-level search (out of scope)
+
+Searching for tokens matching a trait across the full 9,999-token set would require iterating `GET /cc0mon/{id}/traits` — roughly 167 minutes at the 60 req/min rate limit. This is not implemented and is not recommended for typical use. The `/collector/{address}` endpoint and the registry filters cover the realistic use cases.
+
+---
+
+## 17. Glossary
 
 | Term | Definition |
 |------|------------|

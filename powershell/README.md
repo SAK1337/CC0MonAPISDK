@@ -77,6 +77,25 @@ Get-Content .\cc0mon-api-get-token.log -Tail 10
 | `5` | Argument/input validation |
 | `1` | Unexpected error |
 
+## Search & filtering
+
+Three scripts accept filter parameters. Filters are AND-combined and validated against the 16 energies × 4 rarities exposed by `Get-Cc0Energies` / `Get-Cc0Rarities`.
+
+```powershell
+.\scripts\cc0mon-api-get-registry.ps1 -Energy Fire -Rarity Common
+.\scripts\cc0mon-api-get-registry-images.ps1 -NameContains drill -HasImage
+.\scripts\cc0mon-api-get-collector.ps1 -Address 0xB07952A55bF9c45C268F37C3631823Df50ac721a -OwnedOnly -Energy Fire
+```
+
+```powershell
+Import-Module .\CC0MonHelpers.psm1
+Get-Cc0Energies          # 16 canonical energy types
+Get-Cc0Rarities          # 4 canonical rarities
+Test-Cc0Energy -Value 'fire'   # returns 'Fire'; throws on unknown
+```
+
+Invalid `-Energy` / `-Rarity` exits `5` with a message listing valid values.
+
 ## Custom retry behavior
 
 ```powershell

@@ -29,6 +29,6 @@ try {
 } catch {
     $code = ConvertTo-Cc0ExitCode -ErrorRecord $_
     Write-Cc0Log -Action $action -Level ERROR -Message "exit=$code msg=$($_.Exception.Message)"
-    Write-Error $_.Exception.Message
+    [Console]::Error.WriteLine($_.Exception.Message)
     exit $code
 }

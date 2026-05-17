@@ -23,6 +23,7 @@ from .errors import (
 )
 from .models import (
     Collector,
+    CollectorItem,
     Contract,
     Metadata,
     OwnerInfo,
@@ -30,6 +31,8 @@ from .models import (
     SpeciesImage,
     Token,
     Traits,
+    validate_energy,
+    validate_rarity,
 )
 
 DEFAULT_BASE_URL = "https://api.cc0mon.com"
@@ -224,14 +227,71 @@ class Client:
 
     def get_registry(self) -> list[Species]:
         data = self._get_json("/registry")
-        items: Iterable[dict[str, Any]] = data if isinstance(data, list) else data.get("species", data.get("items", []))
+        if isinstance(data, list):
+            items: Iterable[dict[str, Any]] = data
+        else:
+            items = data.get("cc0mon") or data.get("species") or data.get("items") or []
         return [Species.from_dict(item) for item in items]
 
     def get_registry_images(self) -> list[SpeciesImage]:
         data = self._get_json("/registry/images")
-        items: Iterable[dict[str, Any]] = data if isinstance(data, list) else data.get("species", data.get("items", []))
+        if isinstance(data, list):
+            items: Iterable[dict[str, Any]] = data
+        else:
+            images = data.get("images")
+            if isinstance(images, dict):
+                items = (v for v in images.values() if isinstance(v, dict))
+            elif isinstance(images, list):
+                items = images
+            else:
+                items = data.get("species", data.get("items", []))
         return [SpeciesImage.from_dict(item) for item in items]
 
     def get_collector(self, address: str) -> Collector:
         normalized = _normalize_address(address)
         return Collector.from_dict(self._get_json(f"/collector/{normalized}"))
+
+    # ---------- Convenience search methods (client-side filters) ----------
+
+    def find_species(
+        self,
+        energy: str | None = None,
+        rarity: str | None = None,
+        name_contains: str | None = None,
+    ) -> list[Species]:
+        """Return species from ``/registry`` filtered by energy, rarity, and/or name substring.
+
+        All filters are AND-combined. Energy and rarity are validated against the
+        canonical sets in :mod:`cc0mon_sdk.models`. Name matching is case-insensitive.
+        """
+        species = self.get_registry()
+        if energy is not None:
+            e = validate_energy(energy)
+            species = [s for s in species if s.energy == e]
+        if rarity is not None:
+            r = validate_rarity(rarity)
+            species = [s for s in species if s.rarity == r]
+        if name_contains:
+            needle = name_contains.lower()
+            species = [s for s in species if needle in (s.name or "").lower()]
+        return species
+
+    def find_collector_items(
+        self,
+        address: str,
+        owned_only: bool = False,
+        energy: str | None = None,
+        rarity: str | None = None,
+    ) -> list[CollectorItem]:
+        """Return checklist items for an address, filtered by ownership/energy/rarity."""
+        collector = self.get_collector(address)
+        items = collector.checklist
+        if owned_only:
+            items = [i for i in items if i.collected]
+        if energy is not None:
+            e = validate_energy(energy)
+            items = [i for i in items if i.energy == e]
+        if rarity is not None:
+            r = validate_rarity(rarity)
+            items = [i for i in items if i.rarity == r]
+        return items

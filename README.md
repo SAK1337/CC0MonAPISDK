@@ -80,6 +80,26 @@ Sample log line:
 2026-05-17T14:23:08.412Z | INFO | get-token | GET https://api.cc0mon.com/cc0mon/1 | status=200 | latency_ms=187 | bytes=842 | ok
 ```
 
+## Search & filtering
+
+Three scripts accept filter flags. Filters are AND-combined and applied client-side after a single GET.
+
+```powershell
+# Find Fire-type Common species
+python python\examples\cc0mon-api-get-registry.py --energy Fire --rarity Common
+
+# All entries in the species image map that have an actual token
+jbang java\examples\cc0mon-api-get-registry-images.java --has-image
+
+# A wallet's owned Fire-type cc0mon
+.\powershell\scripts\cc0mon-api-get-collector.ps1 -Address 0xB07952A55bF9c45C268F37C3631823Df50ac721a -OwnedOnly -Energy Fire
+```
+
+Valid `--energy` values: Bug, Celestial, Dragon, Earth, Electric, Fire, Fossil, Ghost, Grass, Ice, Metal, Mythic, Ocean, Rock, Toxic, Underworld
+Valid `--rarity` values: Common, Uncommon, Rare, Legendary
+
+Unknown values exit `5` with a friendly listing. SDK users can also call `Client.find_species()` / `Client.find_collector_items()` (Python) or `findSpecies()` / `findCollectorItems()` (Java) directly.
+
 ## Rate-limit handling
 
 The SDK retries on `429` and `5xx` by default — 3 attempts with exponential backoff (base 1s, cap 30s, full jitter), honoring `Retry-After`. Pass `retries=0` to disable.

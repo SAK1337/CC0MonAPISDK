@@ -12,6 +12,43 @@
 
 $script:LevelOrder = @{ DEBUG = 0; INFO = 1; WARNING = 2; ERROR = 3 }
 
+# Canonical, frozen sets of cc0mon attribute values (matches /registry).
+$script:Cc0Energies = @(
+    'Bug','Celestial','Dragon','Earth','Electric','Fire',
+    'Fossil','Ghost','Grass','Ice','Metal','Mythic',
+    'Ocean','Rock','Toxic','Underworld'
+)
+$script:Cc0Rarities = @('Common','Uncommon','Rare','Legendary')
+
+function Get-Cc0Energies { return ,$script:Cc0Energies }
+function Get-Cc0Rarities { return ,$script:Cc0Rarities }
+
+function Test-Cc0Energy {
+    <#
+    .SYNOPSIS
+        Validate an energy value. Returns canonical case or throws a friendly error.
+    #>
+    param([Parameter(Mandatory)] [string] $Value)
+    $needle = $Value.ToLowerInvariant()
+    foreach ($e in $script:Cc0Energies) {
+        if ($e.ToLowerInvariant() -eq $needle) { return $e }
+    }
+    throw "validation: unknown energy: '$Value'. valid: $($script:Cc0Energies -join ', ')"
+}
+
+function Test-Cc0Rarity {
+    <#
+    .SYNOPSIS
+        Validate a rarity value. Returns canonical case or throws a friendly error.
+    #>
+    param([Parameter(Mandatory)] [string] $Value)
+    $needle = $Value.ToLowerInvariant()
+    foreach ($r in $script:Cc0Rarities) {
+        if ($r.ToLowerInvariant() -eq $needle) { return $r }
+    }
+    throw "validation: unknown rarity: '$Value'. valid: $($script:Cc0Rarities -join ', ')"
+}
+
 function Get-Cc0LogLevel {
     $raw = [Environment]::GetEnvironmentVariable('CC0MON_LOG_LEVEL')
     if (-not $raw) { return 'INFO' }
@@ -148,4 +185,4 @@ function ConvertTo-Cc0ExitCode {
     return 1
 }
 
-Export-ModuleMember -Function Write-Cc0Log, Invoke-Cc0Request, Test-Cc0Address, ConvertTo-Cc0ExitCode, Get-Cc0LogLevel
+Export-ModuleMember -Function Write-Cc0Log, Invoke-Cc0Request, Test-Cc0Address, ConvertTo-Cc0ExitCode, Get-Cc0LogLevel, Test-Cc0Energy, Test-Cc0Rarity, Get-Cc0Energies, Get-Cc0Rarities

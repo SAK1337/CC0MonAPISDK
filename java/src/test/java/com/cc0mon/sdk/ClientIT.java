@@ -104,6 +104,7 @@ class ClientIT {
 
     @Test
     void getRegistryImages() {
+        // The 260/259 counts track the live API; bump these if cc0mon adds/maps species.
         List<SpeciesImage> images = client.getRegistryImages();
         assertEquals(260, images.size());
         long mapped = images.stream().filter(i -> i.tokenId() != null).count();
@@ -112,6 +113,7 @@ class ClientIT {
 
     @Test
     void getCollector() {
+        // The 260 totals track the live API; bump if cc0mon adds species.
         Collector c = client.getCollector(KNOWN_HOLDER);
         assertNotNull(c.progress());
         assertTrue(c.progress().endsWith("%"));
@@ -119,6 +121,14 @@ class ClientIT {
         assertEquals(260, c.checklist().size());
         assertNotNull(c.byEnergy());
         assertTrue(c.collected() >= 1);
+    }
+
+    @Test
+    void findSpeciesEmptyResultIsNotError() {
+        // Combination unlikely to match; the call should succeed and return [].
+        List<Species> none = client.findSpecies("Mythic", "Common", "zzz-not-a-real-name");
+        assertNotNull(none);
+        assertTrue(none.isEmpty());
     }
 
     @Test

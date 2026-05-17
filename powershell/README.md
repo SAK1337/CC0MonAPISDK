@@ -51,9 +51,12 @@ Each script under `scripts/` is parameterized via PowerShell's standard `param()
 
 | Function | Purpose |
 |----------|---------|
-| `Invoke-Cc0Request` | HTTP GET with retry/backoff for 429/5xx; honors `Retry-After`. Returns parsed JSON or raw bytes (`-ReturnRaw`). |
-| `Write-Cc0Log` | Append-only log to `./cc0mon-api-<action>.log` with `ISO8601 \| LEVEL \| action \| message`. |
-| `Test-Cc0Address` | Validates an Ethereum 0x-address. |
+| `Invoke-Cc0Request` | HTTP GET with retry/backoff for 429/5xx; honors `Retry-After`. Returns parsed JSON or raw bytes (`-ReturnRaw`, sourced from `RawContentStream` so binary data isn't corrupted). |
+| `Write-Cc0Log` | Append-only log to `./cc0mon-api-<action>.log` with `ISO8601 \| LEVEL \| action \| message`. UTC timestamps. |
+| `Test-Cc0Address` | Returns `$true` if input is a valid 0x-prefixed 42-char hex address. |
+| `Assert-Cc0Address` | Throws a spec-formatted `validation:` error on a bad address — use in script entry points. |
+| `Test-Cc0Energy` / `Test-Cc0Rarity` | Validate case-insensitively; return canonical case or throw. |
+| `Get-Cc0Energies` / `Get-Cc0Rarities` | Return the canonical 16 / 4 string arrays. |
 | `ConvertTo-Cc0ExitCode` | Maps a thrown error record to the spec's exit code (0/1/2/3/4/5). |
 
 ## Logging

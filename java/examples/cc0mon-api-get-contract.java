@@ -21,6 +21,7 @@ class GetContract {
             System.out.println(new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValueAsString(c));
             log.info("script exit code=0 address=" + c.address());
         } catch (Errors.NetworkException e)    { log.severe("network: " + e.getMessage());    System.err.println("network error: " + e.getMessage()); System.exit(2);
+        } catch (Errors.RateLimitException e)  { log.severe("rate limited http " + e.getStatusCode()); System.err.println("rate limited HTTP " + e.getStatusCode() + ": " + e.getBody()); System.exit(3);
         } catch (Errors.ClientApiException e)  { log.severe("http " + e.getStatusCode());     System.err.println("client error HTTP " + e.getStatusCode() + ": " + e.getBody()); System.exit(3);
         } catch (Errors.ServerApiException e)  { log.severe("http " + e.getStatusCode());     System.err.println("server error HTTP " + e.getStatusCode() + ": " + e.getBody()); System.exit(4);
         } catch (Exception e) { log.severe("unexpected: " + e); System.err.println("unexpected: " + e); System.exit(1); }

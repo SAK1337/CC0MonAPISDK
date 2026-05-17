@@ -15,6 +15,7 @@ from cc0mon_sdk import (
     Client,
     ClientApiError,
     NetworkError,
+    RateLimitError,
     ServerApiError,
     ValidationError,
     configure_logger,
@@ -41,6 +42,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("network: %s", e)
         print(f"network error: {e}", file=sys.stderr)
         return 2
+    except RateLimitError as e:
+        logger.error("rate limited http %d: %s", e.status_code, e.body[:200])
+        print(f"rate limited HTTP {e.status_code}: {e.body[:200]}", file=sys.stderr)
+        return 3
     except ClientApiError as e:
         logger.error("http %d: %s", e.status_code, e.body[:200])
         print(f"client error HTTP {e.status_code}: {e.body[:200]}", file=sys.stderr)

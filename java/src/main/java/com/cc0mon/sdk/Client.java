@@ -23,6 +23,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -31,7 +32,6 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
@@ -47,7 +47,7 @@ import java.util.regex.Pattern;
 public final class Client implements AutoCloseable {
 
     public static final String DEFAULT_BASE_URL = "https://api.cc0mon.com";
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = resolveVersion();
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
     private static final int DEFAULT_RETRIES = 3;
     private static final double BACKOFF_BASE_SECONDS = 1.0;
@@ -58,6 +58,7 @@ public final class Client implements AutoCloseable {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final String baseUrl;
+    private final Duration timeout;
     private final int retries;
     private final String userAgent;
     private final HttpClient http;
@@ -67,13 +68,21 @@ public final class Client implements AutoCloseable {
     }
 
     public Client(String baseUrl, Duration timeout, int retries, String userAgent) {
+        if (baseUrl == null) throw new IllegalArgumentException("baseUrl must not be null");
+        if (timeout == null) throw new IllegalArgumentException("timeout must not be null");
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.timeout = timeout;
         this.retries = Math.max(0, retries);
         this.userAgent = userAgent != null ? userAgent : "cc0mon-sdk-java/" + VERSION;
         this.http = HttpClient.newBuilder()
             .connectTimeout(timeout)
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
+    }
+
+    private static String resolveVersion() {
+        String v = Client.class.getPackage().getImplementationVersion();
+        return v != null ? v : "0.0.0-local";
     }
 
     @Override
@@ -90,7 +99,7 @@ public final class Client implements AutoCloseable {
             HttpRequest req = HttpRequest.newBuilder(uri)
                 .header("Accept", accept)
                 .header("User-Agent", userAgent)
-                .timeout(DEFAULT_TIMEOUT)
+                .timeout(timeout)
                 .GET()
                 .build();
             long start = System.nanoTime();
@@ -164,7 +173,7 @@ public final class Client implements AutoCloseable {
 
     private static ApiException mapStatusToException(HttpResponse<byte[]> resp) {
         int status = resp.statusCode();
-        String body = resp.body() == null ? "" : new String(resp.body());
+        String body = resp.body() == null ? "" : new String(resp.body(), StandardCharsets.UTF_8);
         if (status == 429) return new RateLimitException(status, body, parseRetryAfter(resp));
         if (status >= 400 && status < 500) return new ClientApiException(status, body);
         if (status >= 500 && status < 600) return new ServerApiException(status, body);
@@ -176,7 +185,8 @@ public final class Client implements AutoCloseable {
         try {
             return JSON.readTree(r.body());
         } catch (IOException e) {
-            throw new ApiException(r.statusCode(), "invalid JSON: " + e.getMessage());
+            // Status was a success but the body is unparseable: closest semantic match is NetworkException.
+            throw new NetworkException("invalid JSON response from " + path + ": " + e.getMessage(), e);
         }
     }
 

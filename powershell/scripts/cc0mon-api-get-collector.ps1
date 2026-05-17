@@ -34,16 +34,10 @@ Import-Module (Join-Path $PSScriptRoot '..\CC0MonHelpers.psm1') -Force
 $action = 'get-collector'
 Write-Cc0Log -Action $action -Level INFO -Message "script start address=$Address owned_only=$($OwnedOnly.IsPresent) energy=$Energy rarity=$Rarity"
 
-if (-not (Test-Cc0Address -Address $Address)) {
-    $msg = "validation: address must match 0x[0-9a-fA-F]{40}, got $Address"
-    Write-Cc0Log -Action $action -Level ERROR -Message "exit=5 $msg"
-    [Console]::Error.WriteLine($msg)
-    exit 5
-}
-
 $hasFilter = $OwnedOnly.IsPresent -or $Energy -or $Rarity
 
 try {
+    Assert-Cc0Address -Address $Address
     $canonEnergy = $null; $canonRarity = $null
     if ($Energy) { $canonEnergy = Test-Cc0Energy -Value $Energy }
     if ($Rarity) { $canonRarity = Test-Cc0Rarity -Value $Rarity }

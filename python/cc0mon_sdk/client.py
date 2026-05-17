@@ -6,9 +6,11 @@ The client encapsulates request building, retry/backoff for ``429`` and
 from __future__ import annotations
 
 import logging
+import os
 import random
 import re
 import time
+from importlib import metadata as _md
 from typing import Any, Iterable
 
 import httpx
@@ -43,8 +45,16 @@ DEFAULT_BACKOFF_CAP = 30.0
 RETRY_STATUSES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 ETH_ADDRESS_RE = re.compile(r"^0x[0-9a-fA-F]{40}$")
 
+try:
+    __version__ = _md.version("cc0mon-sdk")
+except _md.PackageNotFoundError:
+    __version__ = "0.0.0+local"
+
 _log = logging.getLogger("cc0mon_sdk")
-__version__ = "0.1.0"
+# Honor CC0MON_LOG_LEVEL even when used as a library (without configure_logger).
+_env_level = os.environ.get("CC0MON_LOG_LEVEL")
+if _env_level:
+    _log.setLevel(getattr(logging, _env_level.upper(), logging.INFO))
 
 
 def _validate_token_id(token_id: int) -> int:
@@ -264,12 +274,13 @@ class Client:
         All filters are AND-combined. Energy and rarity are validated against the
         canonical sets in :mod:`cc0mon_sdk.models`. Name matching is case-insensitive.
         """
+        # Validate both filters up front so an invalid input doesn't waste an HTTP call.
+        e = validate_energy(energy) if energy is not None else None
+        r = validate_rarity(rarity) if rarity is not None else None
         species = self.get_registry()
-        if energy is not None:
-            e = validate_energy(energy)
+        if e is not None:
             species = [s for s in species if s.energy == e]
-        if rarity is not None:
-            r = validate_rarity(rarity)
+        if r is not None:
             species = [s for s in species if s.rarity == r]
         if name_contains:
             needle = name_contains.lower()
@@ -284,14 +295,14 @@ class Client:
         rarity: str | None = None,
     ) -> list[CollectorItem]:
         """Return checklist items for an address, filtered by ownership/energy/rarity."""
+        e = validate_energy(energy) if energy is not None else None
+        r = validate_rarity(rarity) if rarity is not None else None
         collector = self.get_collector(address)
         items = collector.checklist
         if owned_only:
             items = [i for i in items if i.collected]
-        if energy is not None:
-            e = validate_energy(energy)
+        if e is not None:
             items = [i for i in items if i.energy == e]
-        if rarity is not None:
-            r = validate_rarity(rarity)
+        if r is not None:
             items = [i for i in items if i.rarity == r]
         return items

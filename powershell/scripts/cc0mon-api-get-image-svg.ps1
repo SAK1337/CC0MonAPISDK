@@ -29,7 +29,6 @@ Write-Cc0Log -Action $action -Level INFO -Message "script start id=$Id out=$Out"
 
 try {
     $bytes = Invoke-Cc0Request -Action $action -Path "/cc0mon/$Id/image.svg" -Accept 'image/svg+xml' -ReturnRaw
-    if ($bytes -is [string]) { $bytes = [System.Text.Encoding]::UTF8.GetBytes($bytes) }
     [System.IO.File]::WriteAllBytes($Out, $bytes)
     (Resolve-Path $Out).Path
     Write-Cc0Log -Action $action -Level INFO -Message "script exit code=0 bytes=$($bytes.Length) path=$Out"

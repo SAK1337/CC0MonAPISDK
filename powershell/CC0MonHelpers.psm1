@@ -10,6 +10,7 @@
     Honors the env var $env:CC0MON_LOG_LEVEL (DEBUG/INFO/WARNING/ERROR; default INFO).
 #>
 
+$script:ModuleVersion = '0.1.0'
 $script:LevelOrder = @{ DEBUG = 0; INFO = 1; WARNING = 2; ERROR = 3 }
 
 # Canonical, frozen sets of cc0mon attribute values (matches /registry).
@@ -99,7 +100,7 @@ function Invoke-Cc0Request {
     while ($true) {
         $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
         try {
-            $headers = @{ 'Accept' = $Accept; 'User-Agent' = "cc0mon-sdk-powershell/0.1.0" }
+            $headers = @{ 'Accept' = $Accept; 'User-Agent' = "cc0mon-sdk-powershell/$script:ModuleVersion" }
             $response = Invoke-WebRequest -Uri $url -Method GET -Headers $headers `
                 -TimeoutSec $TimeoutSec -SkipHttpErrorCheck -ErrorAction Stop
         } catch {
@@ -122,7 +123,15 @@ function Invoke-Cc0Request {
             -Message "GET $url | status=$status | latency_ms=$($stopwatch.ElapsedMilliseconds) | bytes=$bytes | $message"
 
         if ($status -lt 400) {
-            if ($ReturnRaw) { return $response.Content }
+            if ($ReturnRaw) {
+                # Always materialize bytes from the raw stream so binary endpoints (PNG/SVG)
+                # cannot be corrupted by PowerShell's text-vs-binary auto-detection.
+                if ($response.RawContentStream) {
+                    return $response.RawContentStream.ToArray()
+                }
+                if ($response.Content -is [byte[]]) { return $response.Content }
+                throw "expected binary response but got $($response.Content.GetType().Name)"
+            }
             return ($response.Content | ConvertFrom-Json -Depth 32)
         }
 
@@ -166,6 +175,17 @@ function Test-Cc0Address {
     return ($Address -match '^0x[0-9a-fA-F]{40}$')
 }
 
+function Assert-Cc0Address {
+    <#
+    .SYNOPSIS
+        Validate an Ethereum address; throw with a spec-formatted message on failure.
+    #>
+    param([Parameter(Mandatory)] [string] $Address)
+    if (-not (Test-Cc0Address -Address $Address)) {
+        throw "validation: address must match 0x[0-9a-fA-F]{40}, got $Address"
+    }
+}
+
 function ConvertTo-Cc0ExitCode {
     <#
     .SYNOPSIS
@@ -185,4 +205,4 @@ function ConvertTo-Cc0ExitCode {
     return 1
 }
 
-Export-ModuleMember -Function Write-Cc0Log, Invoke-Cc0Request, Test-Cc0Address, ConvertTo-Cc0ExitCode, Get-Cc0LogLevel, Test-Cc0Energy, Test-Cc0Rarity, Get-Cc0Energies, Get-Cc0Rarities
+Export-ModuleMember -Function Write-Cc0Log, Invoke-Cc0Request, Test-Cc0Address, Assert-Cc0Address, ConvertTo-Cc0ExitCode, Get-Cc0LogLevel, Test-Cc0Energy, Test-Cc0Rarity, Get-Cc0Energies, Get-Cc0Rarities

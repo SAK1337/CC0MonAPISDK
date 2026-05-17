@@ -8,12 +8,20 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from pathlib import Path
 
 LOG_FORMAT = (
     "%(asctime)s.%(msecs)03dZ | %(levelname)s | %(action)s | %(message)s"
 )
 DATE_FORMAT = "%Y-%m-%dT%H:%M:%S"
+
+
+def _make_utc_formatter() -> logging.Formatter:
+    # Per-instance converter so we don't flip every Formatter in the process.
+    fmt = logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT)
+    fmt.converter = time.gmtime
+    return fmt
 
 
 class _ActionFilter(logging.Filter):
@@ -53,7 +61,7 @@ def configure_logger(action: str) -> logging.Logger:
         handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
         handler._cc0mon_path = str(log_path)  # type: ignore[attr-defined]
         handler.setLevel(level)
-        handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        handler.setFormatter(_make_utc_formatter())
         handler.addFilter(_ActionFilter(action))
         logger.addHandler(handler)
 
@@ -67,7 +75,7 @@ def configure_logger(action: str) -> logging.Logger:
         sdk_handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
         sdk_handler._cc0mon_path = str(log_path)  # type: ignore[attr-defined]
         sdk_handler.setLevel(level)
-        sdk_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))
+        sdk_handler.setFormatter(_make_utc_formatter())
         sdk_handler.addFilter(_ActionFilter(action))
         sdk_logger.addHandler(sdk_handler)
         sdk_logger.propagate = False

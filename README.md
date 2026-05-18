@@ -19,6 +19,7 @@ The repo ships three independent SDKs plus 30 single-purpose example scripts (10
 - [Java SDK](#java-sdk)
 - [PowerShell SDK](#powershell-sdk)
 - [Example scripts (all 30)](#example-scripts-all-30)
+- [Bulk archive script (PowerShell)](#bulk-archive-script-powershell)
 - [Logging](#logging)
 - [Retry and rate-limit handling](#retry-and-rate-limit-handling)
 - [Error model and exit codes](#error-model-and-exit-codes)
@@ -109,6 +110,7 @@ CC0MonAPISDK/
 └── powershell/
     ├── CC0MonHelpers.psm1          ← shared helpers module
     ├── scripts/                    ← 10 standalone scripts (cc0mon-api-<action>.ps1)
+    │   └── build-mon-archive.ps1   ← bulk per-species archive builder (see below)
     └── README.md
 ```
 
@@ -482,6 +484,111 @@ python python\examples\cc0mon-api-get-collector.py --address 0xB079... --owned-o
 - The SDK normalizes the address to lowercase before sending.
 - Without filters: prints the full collector summary.
 - With any filter: prints only the filtered checklist items array. Empty results print `[]` and exit `0` (not an error).
+
+---
+
+## Bulk archive script (PowerShell)
+
+`powershell/scripts/build-mon-archive.ps1` builds a **complete per-species local archive** in one pass. For each of the 260 species in `/registry` it produces a JSON record (registry summary + ERC-721 metadata + decoded traits + image URLs) and, for the 259 species that have a representative on-chain token, also downloads the SVG and PNG artwork.
+
+This is **not** one of the 30 per-action example scripts — it's a higher-level helper that combines multiple endpoints. Available only in PowerShell at the moment (no Python/Java equivalent).
+
+### Quick start
+
+```powershell
+cd C:\where\you\want\the\archive
+Import-Module .\powershell\CC0MonHelpers.psm1 -Force  # optional; the script does this itself
+.\powershell\scripts\build-mon-archive.ps1
+```
+
+The script creates a `mon\` subfolder in the current working directory and writes the entire archive there. Runtime is ~20–25 minutes for a cold run (≈1,040 API calls under the 60 req/min limit). A warm re-run finishes in ~3 seconds.
+
+### Output layout
+
+```
+<CWD>\mon\
+├── 001-mon-Drillipede.json   (registry + images + ERC-721 metadata + traits)
+├── 001-mon-Drillipede.svg
+├── 001-mon-Drillipede.png
+├── 002-mon-Gustrix.json
+├── ...
+└── 260-mon-Trigaze.json
+```
+
+- Filenames use **3-digit zero-padded species number** so directory listings sort naturally.
+- All three files for a species share the same basename — `Get-ChildItem mon -Filter '042-mon-*'` returns the trio.
+- Duplicate species names (Vilewing #86 / #229; Gazebleed #215 / #228) get distinct files because the species number is the filename prefix.
+
+### JSON record shape
+
+Each per-species JSON merges four endpoints into one document:
+
+```jsonc
+{
+  "number":  1,
+  "name":    "Drillipede",
+  "energy":  "Earth",
+  "rarity":  "Common",
+  "tokenId": 12,
+  "svgUrl":  "https://api.cc0mon.com/cc0mon/12/image.svg",
+  "pngUrl":  "https://api.cc0mon.com/cc0mon/12/image.png",
+  "metadata": { /* full /cc0mon/{tokenId}/metadata response */ },
+  "traits":   { /* full /cc0mon/{tokenId}/traits response */ },
+  "_source":  { "fetchedAt": "<UTC ISO8601>", "sdkScript": "build-mon-archive.ps1" }
+}
+```
+
+The `metadata` and `traits` keys carry the **raw** API response — including any unmodeled fields the SDK doesn't know about — so the archive survives additive API changes without a re-run.
+
+### Parameters
+
+| Parameter | Default | Effect |
+|-----------|--------|--------|
+| `-OutDir <path>` | `<CWD>\mon` | Override the output directory. |
+| `-Force` | off | Re-fetch and overwrite every species, ignoring the resume check. |
+
+### Idempotency and resume
+
+The script writes SVG → PNG → JSON in that order. A species is considered "done" only if **all three** files exist (or, for the unminted species, just the JSON). On re-run, the resume check is purely file-presence-based, so:
+
+- Interrupted run? Just re-run — only the missing species are re-fetched.
+- Want to refresh a single species? Delete its three files and re-run.
+- Want to refresh everything? Pass `-Force` (or delete `mon\`).
+
+If an HTTP call fails after the SDK's built-in retries are exhausted, the affected species is logged to `<CWD>\build-mon-archive-errors.log`, any partial files for that species are removed, and the loop continues. The script exits `0` even with per-species failures — check the errors log to see what to retry.
+
+### The Vilewing #229 quirk (one species has no minted token)
+
+`/registry/images` returns `tokenId: null` for species **#229 Vilewing** (Underworld/Uncommon) — the only species in the registry without a representative on-chain token. The archive script records this faithfully: `229-mon-Vilewing.json` is written with `tokenId`, `metadata`, `traits`, and image URLs all set to `null`, and no `.svg`/`.png` files are produced.
+
+**Why the API can't auto-map it:** the API derives the species→token mapping by reading each token's embedded `#NNN` from on-chain metadata. The Underworld Vilewing tokens on-chain all label themselves `"Vilewing #220"` (a legacy/stale species number — registry #220 is now Verminight). Because no token's metadata says `#229`, the API correctly refuses to auto-substitute and returns `null` instead of guessing.
+
+You can **manually substitute** an alternate token after the fact by finding any minted Underworld Vilewing (its attributes are uniquely identifying: Energy=Underworld + Rarity=Uncommon + species name=Vilewing) and editing `229-mon-Vilewing.json` to reference its tokenId/URLs. If you do, add an `_alternate_token` field documenting the substitution and the on-chain/registry numbering mismatch, so the archive remains honest about its provenance.
+
+### What's reused from the SDK
+
+| Component | From | Purpose |
+|-----------|------|---------|
+| `Invoke-Cc0Request` | `CC0MonHelpers.psm1` | Every HTTP GET, including binary image downloads (`-ReturnRaw` for byte-safe transport). |
+| Retry/backoff with full jitter, `Retry-After` honoring | `Invoke-Cc0SleepForRetry` in `CC0MonHelpers.psm1` | Automatic — no rate-limit code in the script itself. |
+| `Write-Cc0Log` | `CC0MonHelpers.psm1` | Per-request logging into `<CWD>\cc0mon-api-build-mon-archive.log`. Tune verbosity via `$env:CC0MON_LOG_LEVEL`. |
+
+### Verifying an archive
+
+After a run, sanity-check the output:
+
+```powershell
+$mon = '.\mon'
+"JSON: $((Get-ChildItem $mon -Filter '*.json').Count)   (expect 260)"
+"SVG : $((Get-ChildItem $mon -Filter '*.svg').Count)    (expect 259 by default, or 260 if you manually filled in Vilewing #229)"
+"PNG : $((Get-ChildItem $mon -Filter '*.png').Count)    (expect 259 / 260 — same rule)"
+
+# PNG header sniff across all PNGs (8950 4E47 = PNG magic)
+Get-ChildItem $mon -Filter '*.png' | ForEach-Object {
+    $b = [System.IO.File]::ReadAllBytes($_.FullName) | Select-Object -First 4
+    if ($b[0] -ne 0x89 -or $b[1] -ne 0x50) { "BAD: $($_.Name)" }
+}
+```
 
 ---
 
